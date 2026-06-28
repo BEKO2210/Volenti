@@ -1,0 +1,29 @@
+{
+  "name": "volenti",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Volenti — a generative productivity launcher. Intent in, real artifact out.",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @volenti/web dev",
+    "build": "pnpm --filter @volenti/web build",
+    "start": "pnpm --filter @volenti/web start",
+    "lint": "pnpm --filter @volenti/web lint",
+    "typecheck": "pnpm --filter @volenti/web typecheck",
+    "test": "pnpm --filter @volenti/web test",
+    "test:e2e": "pnpm --filter @volenti/web test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "db:generate": "pnpm --filter @volenti/web db:generate",
+    "db:migrate": "pnpm --filter @volenti/web db:migrate"
+  },
+  "devDependencies": {
+    "prettier": "3.4.2",
+    "prettier-plugin-tailwindcss": "0.6.10"
+  }
+}
