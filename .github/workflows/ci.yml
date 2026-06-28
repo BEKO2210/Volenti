@@ -21,6 +21,7 @@ jobs:
       DATABASE_URL: postgres://volenti:volenti@localhost:5432/volenti
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci_dummy_secret_at_least_32_chars_long_000
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +59,7 @@ jobs:
       DATABASE_URL: postgres://volenti:volenti@localhost:5432/volenti
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci_dummy_secret_at_least_32_chars_long_000
     steps:
       - uses: actions/checkout@v4
 

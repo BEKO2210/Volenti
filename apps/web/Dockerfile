@@ -22,8 +22,10 @@ FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
-# DATABASE_URL is only needed to satisfy env validation during build.
+# DATABASE_URL and BETTER_AUTH_SECRET are only needed to satisfy env/auth
+# validation during the build; runtime values come from Coolify secrets.
 ENV DATABASE_URL=postgres://build:build@localhost:5432/build
+ENV BETTER_AUTH_SECRET=build_dummy_secret_at_least_32_chars_long_0
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @volenti/web build
 

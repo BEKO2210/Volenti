@@ -5,6 +5,50 @@
 
 ---
 
+## ADR-002 · Authentifizierung (better-auth) & Tenant-Provisioning
+
+- **Status:** Accepted — 2026-06-28
+- **Rollen:** Mara (CTO), Tom (Backend), Frederike (Security/DSGVO)
+- **Kontext:** Roadmap P0 Schritt 2/3 verlangt Registrierung/Login, Sessions,
+  geschützte Routen und die Multi-Tenant-Verknüpfung mit einem zentralen Guard.
+- **Entscheidung:**
+  - `better-auth` (self-hosted, E-Mail/Passwort) gegen die bestehende Postgres,
+    Drizzle-Adapter. Schema folgt dem better-auth-Kernschema
+    (`user`/`session`/`account`/`verification`); `user` trägt zusätzlich
+    `tenantId` + `role`.
+  - **Tenant-Provisioning** läuft im `user.create.before`-Hook: pro neuem Konto
+    wird atomar ein eigener Tenant angelegt und dessen Id injiziert — es gibt nie
+    einen tenant-losen User. Der `after`-Hook schreibt einen `user.signup`-Eintrag
+    in den tenant-isolierten `audit_log` (DSGVO).
+  - `tenantId` ist als `additionalField` mit `input: false, required: false`
+    deklariert: better-auth validiert Pflicht-Felder VOR dem Hook, daher darf das
+    Feld nicht als „required" gelten; die DB-Spalte bleibt dennoch `NOT NULL` und
+    wird vom Hook gefüllt.
+  - **`requireTenant()`-Guard** löst die Session zu `{userId, tenantId, role,
+    email}` auf oder leitet auf `/login` um. Reine Logik (`resolveTenantContext`,
+    `defaultTenantName`) ist von der better-auth-Laufzeit getrennt und unit-getestet.
+  - **RLS-Scope (Sicherheitsabwägung):** RLS gilt für die Domain-Tabellen
+    (`generations`, `artifacts`, `usage_counters`, `audit_log`). Die better-auth-
+    Tabellen und `tenants` sind bewusst NICHT unter RLS, weil der Sign-in-Lookup
+    und das Sign-up-Provisioning ablaufen, BEVOR ein Tenant-Kontext existiert.
+    Isolation dieser Tabellen erfolgt auf App-Ebene (ein User löst stets nur seine
+    eigene Session → seinen eigenen Tenant auf). Die schützenswerten Daten
+    (Generierungen/Artefakte) bleiben DB-erzwungen isoliert.
+  - **Pre-Launch-Migration squash:** Da noch keine Produktiv-DB existiert, wurde
+    die einzelne Migration zu einer kohärenten `0000`-Migration mit dem neuen
+    Schema zusammengefasst.
+- **Konsequenzen:**
+  - Verifiziert gegen echtes Postgres als Nicht-Superuser-Rolle `volenti_app`:
+    Sign-up legt Tenant+User+Audit-Eintrag an; RLS isoliert `generations`
+    (eigener Kontext sichtbar, fremder Kontext 0 Zeilen, Cross-Tenant-Insert
+    blockiert).
+  - E-Mail-Verifikation ist bis zur Anbindung eines Mail-Providers deaktiviert
+    (keine Fake-Mails). `BETTER_AUTH_SECRET` ist ab jetzt für Build/Run nötig.
+  - Künftige Härtung (optional): SECURITY-DEFINER-Provisioning + RLS auch auf
+    `tenants`.
+
+---
+
 ## ADR-001 · Projekt-Skelett für P0 (Monorepo, Stack-Bootstrap)
 
 - **Status:** Accepted — 2026-06-28

@@ -11,11 +11,16 @@ Provider-Entscheidungen stehen in [`DECISIONS.md`](./DECISIONS.md).
 ## Status
 
 **Roadmap P0 — Skelett & erster echter End-to-End-Flow.**
-Aktueller Stand: lauffähiges Projekt-Skelett (Monorepo, Next.js 15 + React 19, Tailwind,
-Drizzle-Schema mit Row-Level Security, Zod-Env-Validierung, Vitest-Unit-Tests, Playwright-
-Smoke-Test, Docker-Compose, CI-Pipeline). Die KI-Generierung (Anthropic Sonnet, Streaming)
-ist der nächste Roadmap-Schritt und wird **nicht** gefälscht — die Oberfläche ist transparent
-darüber, was sie heute tut.
+Aktueller Stand:
+- **P0.1 ✅** Projekt-Skelett (Monorepo, Next.js 15 + React 19, Tailwind, Drizzle-Schema mit
+  Row-Level Security, Zod-Env-Validierung, Vitest, Playwright, Docker-Compose, CI).
+- **P0.2/P0.3 ✅** Authentifizierung (`better-auth`, E-Mail/Passwort), Session, geschützte
+  Routen (`/app`), Multi-Tenant-Provisioning beim Sign-up und zentraler `requireTenant()`-Guard.
+  Tenant-Isolation gegen echtes Postgres als Nicht-Superuser-Rolle verifiziert.
+
+Die KI-Generierung (Anthropic Sonnet, Streaming) ist der nächste Roadmap-Schritt (P0.4) und
+wird **nicht** gefälscht — die Oberfläche ist transparent darüber, was sie heute tut. Sie
+benötigt einen `ANTHROPIC_API_KEY`.
 
 ## Tech-Stack (festgelegt — siehe CLAUDE.md §5)
 
@@ -38,20 +43,24 @@ pnpm install
 
 # 2. Umgebungsvariablen anlegen und ausfüllen
 cp .env.example .env
-#   -> mindestens DATABASE_URL setzen (passt zu docker-compose.yml)
+#   -> DATABASE_URL setzen (passt zu docker-compose.yml)
+#   -> BETTER_AUTH_SECRET erzeugen: openssl rand -base64 32
 
 # 3. PostgreSQL starten
 docker compose up -d
 
-# 4. Schema-Migration erzeugen und anwenden
-pnpm db:generate
+# 4. Schema-Migration anwenden (als Owner-Rolle)
 pnpm db:migrate
 #   -> danach die RLS-Policies anwenden:
 psql "$DATABASE_URL" -f apps/web/src/lib/db/rls-policies.sql
 
-# 5. Dev-Server starten
+# 5. Dedizierte App-Rolle anlegen (Pflicht: RLS gilt NICHT für Superuser!)
+#    Details + SQL im Kopf von apps/web/src/lib/db/rls-policies.sql.
+#    Danach DATABASE_URL der App auf diese Rolle (z. B. volenti_app) zeigen lassen.
+
+# 6. Dev-Server starten
 pnpm dev
-#   -> http://localhost:3000
+#   -> http://localhost:3000  (Registrieren -> /app)
 ```
 
 ## Wichtige Befehle

@@ -1,4 +1,4 @@
-import { IntentLauncher } from '@/components/intent-launcher';
+import Link from 'next/link';
 
 export default function HomePage() {
   return (
@@ -16,7 +16,20 @@ export default function HomePage() {
         </p>
       </header>
 
-      <IntentLauncher />
+      <div className="flex w-full max-w-xs flex-col gap-3 sm:max-w-sm sm:flex-row">
+        <Link
+          href="/register"
+          className="bg-accent text-accent-foreground focus-visible:ring-accent flex-1 rounded-lg px-5 py-3 text-center font-medium transition hover:opacity-90 focus-visible:ring-2"
+        >
+          Kostenlos starten
+        </Link>
+        <Link
+          href="/login"
+          className="border-border hover:bg-muted focus-visible:ring-accent flex-1 rounded-lg border px-5 py-3 text-center font-medium transition focus-visible:ring-2"
+        >
+          Anmelden
+        </Link>
+      </div>
 
       <footer className="text-muted-foreground text-center text-xs">
         KI-generierte Inhalte werden als solche gekennzeichnet · EU-Hosting · DSGVO by design
