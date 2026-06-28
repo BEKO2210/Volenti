@@ -115,6 +115,13 @@ jobs:
             GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO volenti_app;
           SQL
 
+      - name: Integration tests (DB + RLS, app role)
+        # Exercises the generation orchestration against the restricted app role
+        # with a fake generator (no ANTHROPIC_API_KEY required).
+        env:
+          DATABASE_URL: postgres://volenti_app:volenti_app_ci@localhost:5432/volenti
+        run: pnpm test:integration
+
       - name: Build
         run: pnpm build
 

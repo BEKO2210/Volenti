@@ -1,5 +1,5 @@
 import { requireTenant } from '@/lib/auth/guard';
-import { IntentLauncher } from '@/components/intent-launcher';
+import { TextGenerationPanel } from '@/components/text-generation-panel';
 import { LogoutButton } from '@/components/logout-button';
 
 // Protected workspace. requireTenant() redirects unauthenticated visitors to
@@ -24,7 +24,7 @@ export default async function AppPage() {
           <h1 className="text-3xl font-semibold tracking-tight">Was möchtest du erstellen?</h1>
           <p className="text-muted-foreground mt-2">Beschreibe dein Ziel in einem Satz.</p>
         </div>
-        <IntentLauncher />
+        <TextGenerationPanel />
       </section>
 
       <footer className="border-border text-muted-foreground border-t pt-4 text-center text-xs">

@@ -5,6 +5,41 @@
 
 ---
 
+## ADR-003 · Text-Generierungs-Fundament (P0.4a, key-frei)
+
+- **Status:** Accepted — 2026-06-28
+- **Rollen:** Dr. Amir (AI), Tom (Backend), Sven (Billing), Frederike (Compliance)
+- **Kontext:** Roadmap P0 Schritt 4 (erster echter Generierungs-Typ: Text). Es liegt
+  noch kein `ANTHROPIC_API_KEY` vor. CLAUDE.md-Regel 2 verbietet Fake-Antworten.
+- **Entscheidung:**
+  - Den vollständigen, realen Generierungs-Pfad bauen, aber den Live-Call hinter
+    einem `requireEnv('ANTHROPIC_API_KEY')`-Guard kapseln: ohne Key stoppt der Code
+    ehrlich (UI: „KI noch nicht konfiguriert"), statt zu faken.
+  - `TextGenerator`-Interface entkoppelt die Orchestrierung vom SDK; der Anthropic-
+    Adapter nutzt `messages.stream` + `finalMessage()` (Streaming intern gegen
+    HTTP-Timeouts), Modell `claude-sonnet-4-6`.
+  - Orchestrierung (`createTextGeneration`): Quota-Check → Reservierung +
+    `generations`(running) → Generator → `artifacts` + Usage + Audit (completed)
+    bzw. failed. Alle tenant-bezogenen Writes via `withTenant`/RLS. Generator wird
+    injiziert → voll testbar ohne Key.
+  - **Usage-Metering & harte Quote** (Sven): pro Tenant/Periode (YYYY-MM); Free=20,
+    Pro=1000 Generierungen/Monat. Slot wird vor dem Call reserviert (auch
+    Fehlversuche zählen) → kein unbegrenztes Generieren (CLAUDE.md §11).
+    Kosten über Pricing-Tabelle (Sonnet $3/$15, Haiku $1/$5 pro MTok).
+  - **KI-Kennzeichnung** (Frederike): Artefakte tragen `aiLabeled=true`, im UI als
+    „KI-generiert" gekennzeichnet (EU-AI-Act).
+  - v1/P0.4 unterstützt nur **Text**; Bild/Dokument-Intents werden ehrlich abgelehnt.
+- **Konsequenzen:**
+  - Verifiziert: Orchestrierung gegen echtes Postgres (Erfolg, Quota-Block,
+    Fehlerpfad) als `volenti_app`-Rolle; E2E prüft den ehrlichen No-Key-Pfad.
+  - **Nicht** getestet ohne Key: der echte Anthropic-Call selbst (Adapter ist
+    geradlinige SDK-Nutzung, an der `claude-api`-Referenz ausgerichtet). Sobald der
+    Key vorliegt: ein E2E-Smoke-Test gegen eine reale Generierung ergänzen.
+  - Token-genaues Live-Streaming in die UI ist Folgeausbau; aktuell wird das
+    fertige Artefakt angezeigt (intern wird gestreamt).
+
+---
+
 ## ADR-002 · Authentifizierung (better-auth) & Tenant-Provisioning
 
 - **Status:** Accepted — 2026-06-28
