@@ -55,7 +55,25 @@ jobs:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     needs: quality
+    # Postgres service for the auth/tenant flow. Migrations run as the owner
+    # role; the app under test connects as a NOSUPERUSER NOBYPASSRLS role so RLS
+    # is actually enforced (matches production setup).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: volenti
+          POSTGRES_PASSWORD: volenti
+          POSTGRES_DB: volenti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U volenti -d volenti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
+      # Owner connection — used for migrations, RLS policies and role setup.
       DATABASE_URL: postgres://volenti:volenti@localhost:5432/volenti
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       BETTER_AUTH_URL: http://localhost:3000
@@ -80,8 +98,28 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @volenti/web exec playwright install --with-deps chromium
 
+      - name: Apply migrations (owner role)
+        run: pnpm db:migrate
+
+      - name: Apply RLS policies (owner role)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/web/src/lib/db/rls-policies.sql
+
+      - name: Create dedicated app role (NOSUPERUSER NOBYPASSRLS)
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DROP ROLE IF EXISTS volenti_app;
+          CREATE ROLE volenti_app LOGIN PASSWORD 'volenti_app_ci' NOSUPERUSER NOBYPASSRLS;
+          GRANT USAGE ON SCHEMA public TO volenti_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO volenti_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO volenti_app;
+          SQL
+
       - name: Build
         run: pnpm build
 
       - name: Run E2E tests
+        # The app under test connects as the restricted app role so RLS applies.
+        env:
+          DATABASE_URL: postgres://volenti_app:volenti_app_ci@localhost:5432/volenti
         run: pnpm test:e2e
