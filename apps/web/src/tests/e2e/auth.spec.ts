@@ -31,10 +31,11 @@ test.describe('Auth flow', () => {
     await expect(page.getByText(email)).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Was möchtest du erstellen?' })).toBeVisible();
 
-    // Heuristic launcher works inside the workspace.
+    // Generation panel is wired up. Without ANTHROPIC_API_KEY configured (as in
+    // CI), the backend honestly reports it is not configured — never a fake.
     await page.getByLabel('Ich möchte…').fill('Schreibe eine freundliche E-Mail');
-    await page.getByRole('button', { name: 'Erkennen' }).click();
-    await expect(page.getByText('Erkannter Typ:')).toBeVisible();
+    await page.getByRole('button', { name: 'Generieren' }).click();
+    await expect(page.getByText(/noch nicht konfiguriert/)).toBeVisible();
 
     // Logout, then the protected route must redirect to login.
     await page.getByRole('button', { name: 'Abmelden' }).click();

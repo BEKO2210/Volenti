@@ -17,10 +17,14 @@ Aktueller Stand:
 - **P0.2/P0.3 ✅** Authentifizierung (`better-auth`, E-Mail/Passwort), Session, geschützte
   Routen (`/app`), Multi-Tenant-Provisioning beim Sign-up und zentraler `requireTenant()`-Guard.
   Tenant-Isolation gegen echtes Postgres als Nicht-Superuser-Rolle verifiziert.
+- **P0.4a ✅ (key-frei)** Text-Generierungs-Fundament: Anthropic-Adapter (`claude-sonnet-4-6`,
+  Streaming) hinter `requireEnv`-Guard, Orchestrierung `Intent → generations → artifacts`
+  mit Usage-Metering & harter Quote (Sven), KI-Kennzeichnung (EU-AI-Act). Orchestrierung
+  gegen echtes Postgres verifiziert; Server-Action + `/app`-UI angebunden.
 
-Die KI-Generierung (Anthropic Sonnet, Streaming) ist der nächste Roadmap-Schritt (P0.4) und
-wird **nicht** gefälscht — die Oberfläche ist transparent darüber, was sie heute tut. Sie
-benötigt einen `ANTHROPIC_API_KEY`.
+**Der echte Live-Call benötigt einen `ANTHROPIC_API_KEY`.** Ohne Key stoppt der Code ehrlich
+(„KI noch nicht konfiguriert") — es werden **keine** Platzhalter-Ergebnisse erzeugt. Sobald
+der Key gesetzt ist, erzeugt `/app` echte Texte.
 
 ## Tech-Stack (festgelegt — siehe CLAUDE.md §5)
 
