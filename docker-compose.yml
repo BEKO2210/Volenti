@@ -1,0 +1,32 @@
+# =============================================================================
+# Volenti — local development stack
+# -----------------------------------------------------------------------------
+# Brings up PostgreSQL 16 for local development. The app itself is run with
+# `pnpm dev` on the host for fast HMR. A production app image is built via the
+# Dockerfile and deployed through Coolify (see DECISIONS.md).
+#
+#   docker compose up -d        # start postgres
+#   docker compose down         # stop (data persists in the named volume)
+# =============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: volenti-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: volenti
+      POSTGRES_PASSWORD: volenti_local_dev
+      POSTGRES_DB: volenti
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volenti -d volenti"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+    driver: local
