@@ -1,10 +1,20 @@
 -- =============================================================================
 -- Volenti — Row-Level Security policies
 -- -----------------------------------------------------------------------------
--- Tenant isolation enforced by PostgreSQL itself. Every tenant-scoped table
--- only exposes rows whose `tenant_id` matches the session setting
--- `app.tenant_id`, which the application sets per-transaction via
--- `set_config('app.tenant_id', <id>, true)` (see db/index.ts -> withTenant).
+-- Tenant isolation enforced by PostgreSQL itself on the domain tables that hold
+-- tenant data and AI outputs. Each such table only exposes rows whose
+-- `tenant_id` matches the session setting `app.tenant_id`, which the application
+-- sets per-transaction via `set_config('app.tenant_id', <id>, true)`
+-- (see db/index.ts -> withTenant).
+--
+-- Scope (ADR-002): RLS is applied to generations, artifacts, usage_counters and
+-- audit_log. It is intentionally NOT applied to the better-auth tables
+-- (user, session, account, verification) or to `tenants`, because:
+--   * the sign-in lookup queries `user`/`session` BEFORE any tenant context
+--     exists, so RLS there would break authentication;
+--   * tenant provisioning on sign-up inserts a `tenants` row before a context
+--     exists. These tables are guarded at the application layer (a user only
+--     ever resolves their own session -> their own tenantId).
 --
 -- Apply AFTER the generated table migration:
 --   psql "$DATABASE_URL" -f src/lib/db/rls-policies.sql
@@ -24,8 +34,7 @@
 --     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO volenti_app;
 --
 -- Point DATABASE_URL (the app runtime) at volenti_app; keep the owner role for
--- migrations only. Verified: with this role, set_config('app.tenant_id', ...)
--- restricts every query to a single tenant and blocks cross-tenant writes.
+-- migrations only.
 -- =============================================================================
 
 -- Helper: current tenant id from the session, or NULL when unset.
@@ -38,8 +47,6 @@ DO $$
 DECLARE
   t text;
   tenant_tables text[] := ARRAY[
-    'tenants',
-    'users',
     'generations',
     'artifacts',
     'usage_counters',
@@ -50,30 +57,9 @@ BEGIN
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
+    EXECUTE format(
+      'CREATE POLICY tenant_isolation ON %I USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant())',
+      t
+    );
   END LOOP;
 END $$;
-
--- `tenants` is keyed on its own `id`; all other tables on `tenant_id`.
-CREATE POLICY tenant_isolation ON tenants
-  USING (id = app_current_tenant())
-  WITH CHECK (id = app_current_tenant());
-
-CREATE POLICY tenant_isolation ON users
-  USING (tenant_id = app_current_tenant())
-  WITH CHECK (tenant_id = app_current_tenant());
-
-CREATE POLICY tenant_isolation ON generations
-  USING (tenant_id = app_current_tenant())
-  WITH CHECK (tenant_id = app_current_tenant());
-
-CREATE POLICY tenant_isolation ON artifacts
-  USING (tenant_id = app_current_tenant())
-  WITH CHECK (tenant_id = app_current_tenant());
-
-CREATE POLICY tenant_isolation ON usage_counters
-  USING (tenant_id = app_current_tenant())
-  WITH CHECK (tenant_id = app_current_tenant());
-
-CREATE POLICY tenant_isolation ON audit_log
-  USING (tenant_id = app_current_tenant())
-  WITH CHECK (tenant_id = app_current_tenant());

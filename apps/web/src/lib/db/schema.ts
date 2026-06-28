@@ -13,12 +13,18 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Volenti v1 minimum schema (CLAUDE.md §6.4).
+ * Volenti v1 schema.
  *
- * Multi-tenancy: every tenant-scoped row carries `tenantId`. Isolation is
- * enforced at the database level via Row-Level Security policies (see
- * migrations/0001_rls_policies.sql) AND in application code via a central
- * requireTenant() guard — never one without the other.
+ * Auth tables (`user`, `session`, `account`, `verification`) follow the
+ * better-auth core schema and are managed exclusively by better-auth. The
+ * `user` row additionally carries `tenantId` + `role` (set during sign-up
+ * provisioning, never by user input).
+ *
+ * Domain tables (`generations`, `artifacts`, `usage_counters`, `audit_log`)
+ * carry `tenantId` and are isolated at the database level via Row-Level
+ * Security (see migrations + rls-policies.sql) plus the requireTenant() guard.
+ * Auth tables are intentionally NOT under RLS — the sign-in lookup runs before
+ * any tenant context exists (see DECISIONS.md ADR-002).
  */
 
 // --- Enums -------------------------------------------------------------------
@@ -48,31 +54,75 @@ export const tenants = pgTable('tenants', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// --- Users -------------------------------------------------------------------
-// Identity/credentials are managed by better-auth; this table holds the
-// app-level tenant membership and role. `email` is unique per tenant.
+// --- Auth: user (better-auth core + tenant membership) -----------------------
 
-export const users = pgTable(
-  'users',
+export const user = pgTable(
+  'user',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    email: text('email').notNull().unique(),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    image: text('image'),
+    // Tenant membership — populated by the sign-up provisioning hook.
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    email: text('email').notNull(),
-    name: text('name'),
     role: userRoleEnum('role').notNull().default('owner'),
-    emailVerified: boolean('email_verified').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    unique('users_tenant_email_unique').on(table.tenantId, table.email),
-    index('users_tenant_idx').on(table.tenantId),
-  ],
+  (table) => [index('user_tenant_idx').on(table.tenantId)],
 );
 
+// --- Auth: session -----------------------------------------------------------
+
+export const session = pgTable('session', {
+  id: text('id').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  token: text('token').notNull().unique(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Auth: account (credentials / OAuth links) -------------------------------
+
+export const account = pgTable('account', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  idToken: text('id_token'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+  scope: text('scope'),
+  // Hashed password for email/password accounts (better-auth manages hashing).
+  password: text('password'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Auth: verification ------------------------------------------------------
+
+export const verification = pgTable('verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // --- Generations -------------------------------------------------------------
-// One row per intent the user submitted, with cost/usage metering fields.
 
 export const generations = pgTable(
   'generations',
@@ -81,9 +131,9 @@ export const generations = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
+    userId: text('user_id')
       .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+      .references(() => user.id, { onDelete: 'cascade' }),
     type: generationTypeEnum('type').notNull(),
     intentText: text('intent_text').notNull(),
     status: generationStatusEnum('status').notNull().default('pending'),
@@ -102,7 +152,6 @@ export const generations = pgTable(
 );
 
 // --- Artifacts ---------------------------------------------------------------
-// The actual produced output, always AI-labeled (EU AI Act transparency).
 
 export const artifacts = pgTable(
   'artifacts',
@@ -125,7 +174,6 @@ export const artifacts = pgTable(
 );
 
 // --- Usage counters ----------------------------------------------------------
-// Per-tenant, per-period rollup for plan limits & billing (Sven · Billing).
 
 export const usageCounters = pgTable(
   'usage_counters',
@@ -134,7 +182,6 @@ export const usageCounters = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    // Billing period bucket, e.g. "2026-06" (YYYY-MM, UTC).
     period: text('period').notNull(),
     generationsCount: integer('generations_count').notNull().default(0),
     tokensUsed: bigint('tokens_used', { mode: 'number' }).notNull().default(0),
@@ -144,7 +191,6 @@ export const usageCounters = pgTable(
 );
 
 // --- Audit log ---------------------------------------------------------------
-// Security/privacy-relevant actions (DSGVO). Append-only by convention.
 
 export const auditLog = pgTable(
   'audit_log',
@@ -153,7 +199,7 @@ export const auditLog = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    actorId: uuid('actor_id').references(() => users.id, { onDelete: 'set null' }),
+    actorId: text('actor_id').references(() => user.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
     target: text('target'),
     meta: jsonb('meta').$type<Record<string, unknown>>(),
@@ -166,8 +212,9 @@ export const auditLog = pgTable(
 
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+export type User = typeof user.$inferSelect;
+export type NewUser = typeof user.$inferInsert;
+export type Session = typeof session.$inferSelect;
 export type Generation = typeof generations.$inferSelect;
 export type NewGeneration = typeof generations.$inferInsert;
 export type Artifact = typeof artifacts.$inferSelect;
